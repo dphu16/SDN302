@@ -1,22 +1,15 @@
 const express = require("express");
 
-const articleRoute = require('./routes/articleRouter');
-const commentRoute = require('./routes/commentRouter');
+const articleRouter = require("./routes/articleRouter");
+const commentRouter = require("./routes/commentRouter");
 
 const app = express();
-const PORT = 3000;
 
 app.use(express.json());
 
-app.use('/articles', articleRoute);
-app.use('/comments', commentRoute);
+app.use("/articles", articleRouter);
+app.use("/comments", commentRouter);
 
-app.get('/', (req, res) => {
-  res.redirect('/articles');
+app.listen(3000, () => {
+    console.log("Server running at http://localhost:3000");
 });
-
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
-
-module.exports = app;

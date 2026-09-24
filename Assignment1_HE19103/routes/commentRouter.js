@@ -2,123 +2,166 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 
-const commentRoute = express.Router();
-const dataFilePath = path.join(__dirname, "../data.json");
+const router = express.Router();
 
-const readDataFromFile = async () => {
-  const rawData = await fs.promises.readFile(dataFilePath, "utf-8");
-  return JSON.parse(rawData);
-};
+const DATA_FILE = path.join(__dirname, "../data.json");
 
-const writeDataToFile = async (data) => {
-  await fs.promises.writeFile(dataFilePath, JSON.stringify(data, null, 2), "utf-8");
-};
+async function getData() {
+    const data = await fs.promises.readFile(DATA_FILE, "utf8");
+    return JSON.parse(data);
+}
 
-commentRoute.get("/", async (req, res) => {
-  try {
-    const data = await readDataFromFile();
-    return res.status(200).json(data.comments);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
+async function saveData(data) {
+    await fs.promises.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+router.get("/", async (req, res) => {
+    const data = await getData();
+
+    res.status(200).json(data.comments);
 });
 
-commentRoute.get("/article/:articleId", async (req, res) => {
-  try {
+router.get("/article/:articleId", async (req, res) => {
+    const data = await getData();
     const articleId = Number(req.params.articleId);
-    const data = await readDataFromFile();
-    const comments = data.comments.filter((item) => item.articleId === articleId);
-    return res.status(200).json(comments);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
+
+    const comments = data.comments.filter(
+        comment => comment.articleId === articleId
+    );
+
+    if (comments.length === 0) {
+        return res.status(404).json({
+            message: "Not found"
+        });
+    }
+
+    res.status(200).json(comments);
 });
 
-commentRoute.get("/:id", async (req, res) => {
-  try {
+router.get("/:id", async (req, res) => {
+    const data = await getData();
+
     const id = Number(req.params.id);
-    const data = await readDataFromFile();
-    const comment = data.comments.find((item) => item.id === id);
+
+    const comment = data.comments.find(
+        comment => comment.id === id
+    );
 
     if (!comment) {
-      return res.status(404).json({ message: "Not found" });
+        return res.status(404).json({
+            message: "Not found"
+        });
     }
 
-    return res.status(200).json(comment);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
+    res.status(200).json(comment);
 });
 
-commentRoute.post("/", async (req, res) => {
-  try {
-    const { articleId, author, content, date } = req.body;
+router.post("/", async (req, res) => {
+    const {
+        articleId,
+        author,
+        content,
+        date
+    } = req.body;
 
     if (!articleId || !author || !content || !date) {
-      return res.status(400).json({ message: "articleId, author, content and date are required" });
+        return res.status(404).json(null);
     }
 
-    const data = await readDataFromFile();
-    const articleExists = data.articles.some((article) => article.id === Number(articleId));
+    const data = await getData();
 
-    if (!articleExists) {
-      return res.status(404).json({ message: "Article does not exist" });
+    const article = data.articles.find(
+        article => article.id === Number(articleId)
+    );
+
+    if (!article) {
+        return res.status(404).json(null);
     }
 
-    const newId = data.comments.length ? Math.max(...data.comments.map((item) => item.id)) + 1 : 1;
-    const newComment = { id: newId, articleId: Number(articleId), author, content, date };
-
-    data.comments.push(newComment);
-    await writeDataToFile(data);
-
-    return res.status(201).json(newComment);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-});
-
-commentRoute.put("/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    const { articleId, author, content, date } = req.body;
-    const data = await readDataFromFile();
-    const commentIndex = data.comments.findIndex((item) => item.id === id);
-
-    if (commentIndex === -1) {
-      return res.status(404).json({ message: "Comment not found" });
-    }
-
-    data.comments[commentIndex] = {
-      ...data.comments[commentIndex],
-      articleId: articleId !== undefined ? Number(articleId) : data.comments[commentIndex].articleId,
-      author: author ?? data.comments[commentIndex].author,
-      content: content ?? data.comments[commentIndex].content,
-      date: date ?? data.comments[commentIndex].date,
+    const newComment = {
+        id: data.comments.length > 0
+            ? data.comments[data.comments.length - 1].id + 1
+            : 1,
+        articleId: Number(articleId),
+        author,
+        content,
+        date
     };
 
-    await writeDataToFile(data);
-    return res.status(200).json(data.comments[commentIndex]);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
+    data.comments.push(newComment);
+
+    await saveData(data);
+
+    res.status(201).json(newComment);
 });
 
-commentRoute.delete("/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    const data = await readDataFromFile();
-    const commentIndex = data.comments.findIndex((item) => item.id === id);
+router.put("/:id", async (req, res) => {
+    const data = await getData();
 
-    if (commentIndex === -1) {
-      return res.status(404).json({ message: "Comment not found" });
+    const id = Number(req.params.id);
+
+    const comment = data.comments.find(
+        comment => comment.id === id
+    );
+
+    if (!comment) {
+        return res.status(404).json({
+            message: "Not found"
+        });
     }
 
-    const deletedComment = data.comments.splice(commentIndex, 1)[0];
-    await writeDataToFile(data);
-    return res.status(200).json({ message: "Comment deleted", comment: deletedComment });
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
+    const {
+        articleId,
+        author,
+        content,
+        date
+    } = req.body;
+
+    if (!articleId || !author || !content || !date) {
+        return res.status(404).json(null);
+    }
+
+    const article = data.articles.find(
+        article => article.id === Number(articleId)
+    );
+
+    if (!article) {
+        return res.status(404).json({
+            message: "Not found"
+        });
+    }
+
+    comment.articleId = Number(articleId);
+    comment.author = author;
+    comment.content = content;
+    comment.date = date;
+
+    await saveData(data);
+
+    res.status(200).json(comment);
 });
 
-module.exports = commentRoute;
+router.delete("/:id", async (req, res) => {
+    const data = await getData();
+
+    const id = Number(req.params.id);
+
+    const index = data.comments.findIndex(
+        comment => comment.id === id
+    );
+
+    if (index === -1) {
+        return res.status(404).json({
+            message: "Not found"
+        });
+    }
+
+    const deletedComment = data.comments.splice(index, 1)[0];
+
+    await saveData(data);
+
+    res.status(200).json(deletedComment);
+});
+
+module.exports = router;
+
